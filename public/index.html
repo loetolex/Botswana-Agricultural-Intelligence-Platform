@@ -9,7 +9,6 @@
 <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
 
 <style>
-
 *{
     margin:0;
     padding:0;
@@ -142,6 +141,35 @@ input[type=file]{
     transition:.5s;
 }
 
+.ai-section{
+    margin-top:25px;
+    padding-top:20px;
+    border-top:1px solid #d5ead8;
+}
+
+.ai-title{
+    color:#0f8f3d;
+    margin-bottom:12px;
+    font-size:24px;
+}
+
+#aiReportContent{
+    line-height:1.8;
+    color:#222;
+}
+
+#aiReportContent h2,
+#aiReportContent h3{
+    color:#0f8f3d;
+    margin-top:16px;
+    margin-bottom:8px;
+}
+
+#aiReportContent ul{
+    margin-left:20px;
+    margin-bottom:10px;
+}
+
 .footer{
     text-align:center;
     margin-top:20px;
@@ -149,7 +177,6 @@ input[type=file]{
 }
 
 @media(max-width:768px){
-
     .header h1{
         font-size:28px;
     }
@@ -158,8 +185,10 @@ input[type=file]{
         font-size:22px;
     }
 
+    .ai-title{
+        font-size:20px;
+    }
 }
-
 </style>
 </head>
 
@@ -183,54 +212,36 @@ input[type=file]{
                 accept="image/*">
         </div>
 
-        <div
-            class="preview"
-            id="preview">
-
-            <img id="previewImage">
-
+        <div class="preview" id="preview">
+            <img id="previewImage" alt="Preview">
         </div>
 
-        <button
-            class="predict-btn"
-            onclick="predictImage()">
-
+        <button class="predict-btn" onclick="predictImage()">
             Predict Pest
-
         </button>
 
-        <div
-            class="loading"
-            id="loading">
-
+        <div class="loading" id="loading">
             Analyzing Image...
-
         </div>
 
-        <div
-            class="result-card"
-            id="resultCard">
+        <div class="result-card" id="resultCard">
 
-            <div
-                class="result-title"
-                id="prediction">
-
+            <div class="result-title" id="prediction">
                 Prediction
-
             </div>
 
-            <div
-                class="confidence"
-                id="confidence">
-
+            <div class="confidence" id="confidence">
                 Confidence
-
             </div>
 
             <div class="progress">
-                <div
-                    class="progress-bar"
-                    id="progressBar">
+                <div class="progress-bar" id="progressBar"></div>
+            </div>
+
+            <div class="ai-section">
+                <div class="ai-title">🤖 AI Agricultural Advisory</div>
+                <div id="aiReportContent">
+                    <p>Your advisory report will appear here.</p>
                 </div>
             </div>
 
@@ -252,9 +263,7 @@ let labels;
 
 async function loadModel(){
 
-    model = await tf.loadLayersModel(
-        "./model.json"
-    );
+    model = await tf.loadLayersModel("./model.json");
 
     const metadata =
         await fetch("./metadata.json")
@@ -263,7 +272,6 @@ async function loadModel(){
     labels = metadata.labels;
 
     console.log("Model Loaded");
-
 }
 
 loadModel();
@@ -276,44 +284,27 @@ document
 
     if(!file) return;
 
-    const imageUrl =
-        URL.createObjectURL(file);
+    const imageUrl = URL.createObjectURL(file);
 
-    document
-        .getElementById("previewImage")
-        .src = imageUrl;
-
-    document
-        .getElementById("preview")
-        .style.display = "block";
-
+    document.getElementById("previewImage").src = imageUrl;
+    document.getElementById("preview").style.display = "block";
 });
 
 async function predictImage(){
 
     const file =
-        document
-        .getElementById("imageInput")
-        .files[0];
+        document.getElementById("imageInput").files[0];
 
     if(!file){
-
-        alert(
-            "Please select an image."
-        );
-
+        alert("Please select an image.");
         return;
     }
 
-    document
-        .getElementById("loading")
-        .style.display = "block";
+    document.getElementById("loading").style.display = "block";
+    document.getElementById("resultCard").style.display = "none";
 
     const img = new Image();
-
-    img.src =
-        URL.createObjectURL(file);
-
+    img.src = URL.createObjectURL(file);
     await img.decode();
 
     let tensor =
@@ -322,68 +313,75 @@ async function predictImage(){
         .resizeBilinear([224,224])
         .toFloat();
 
-    tensor =
-        tensor.div(127.5).sub(1);
+    tensor = tensor.div(127.5).sub(1);
+    tensor = tensor.expandDims();
 
-    tensor =
-        tensor.expandDims();
-
-    const prediction =
-        model.predict(tensor);
-
-    const scores =
-        await prediction.data();
+    const prediction = model.predict(tensor);
+    const scores = await prediction.data();
 
     let bestIndex = 0;
 
-    for(let i=1;i<scores.length;i++){
-
-        if(
-            scores[i] >
-            scores[bestIndex]
-        ){
+    for(let i = 1; i < scores.length; i++){
+        if(scores[i] > scores[bestIndex]){
             bestIndex = i;
         }
     }
 
-    const label =
-        labels[bestIndex];
+    const label = labels[bestIndex];
 
-    const confidence =
-        parseFloat(
-            (
-                scores[bestIndex] * 100
-            ).toFixed(2)
-        );
+    const confidence = parseFloat(
+        (scores[bestIndex] * 100).toFixed(2)
+    );
 
-    document
-        .getElementById("loading")
-        .style.display = "none";
-
-    document
-        .getElementById("resultCard")
-        .style.display = "block";
-
-    document
-        .getElementById("prediction")
-        .innerHTML = label;
-
-    document
-        .getElementById("confidence")
-        .innerHTML =
-            confidence +
-            "% Confidence";
-
-    document
-        .getElementById("progressBar")
-        .style.width =
-            confidence + "%";
+    document.getElementById("loading").style.display = "none";
+    document.getElementById("resultCard").style.display = "block";
+    document.getElementById("prediction").innerHTML = label;
+    document.getElementById("confidence").innerHTML = confidence + "% Confidence";
+    document.getElementById("progressBar").style.width = confidence + "%";
 
     console.log({
         prediction: label,
         confidence: confidence
     });
 
+    await generateAIReport(label, confidence);
+}
+
+async function generateAIReport(label, confidence){
+
+    const reportContent =
+        document.getElementById("aiReportContent");
+
+    reportContent.innerHTML = "<p>Generating AI advisory report...</p>";
+
+    try{
+
+        const response = await fetch("/api/generate-report", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+                disease: label,
+                confidence: confidence,
+                country: "Botswana",
+                district: "Gaborone",
+                cropOrAnimal: "Pest"
+            })
+        });
+
+        const data = await response.json();
+
+        if(data.success && data.report){
+            reportContent.innerHTML = data.report;
+        }else{
+            reportContent.innerHTML = "<p>Unable to generate AI report.</p>";
+        }
+
+    }catch(error){
+        console.error(error);
+        reportContent.innerHTML = "<p>Error generating AI report.</p>";
+    }
 }
 
 </script>
