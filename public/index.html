@@ -385,39 +385,74 @@ async function predictImage(){
 
 async function generateAIReport(label, confidence){
 
-    const reportContent = document.getElementById("aiReportContent");
-    reportContent.innerHTML = "<p>Generating AI advisory report...</p>";
+    const reportContent =
+        document.getElementById("aiReportContent");
+
+    reportContent.innerHTML =
+        "<p>Generating AI advisory report...</p>";
 
     try{
 
-        const response = await fetch("/api/generate-report", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                disease: label,
-                confidence: confidence,
-                country: "Botswana",
-                district: "Gaborone",
-                cropOrAnimal: "Pest"
-            })
-        });
+        const response = await fetch(
+            "/api/generate-report",
+            {
+                method:"POST",
+                headers:{
+                    "Content-Type":"application/json"
+                },
+                body:JSON.stringify({
+                    disease:label,
+                    confidence:confidence,
+                    country:"Botswana",
+                    district:"Gaborone",
+                    cropOrAnimal:"Pest"
+                })
+            }
+        );
 
-        const data = await response.json();
+        const data =
+            await response.json();
 
-        if(data.success && data.report){
-            reportContent.innerHTML = data.report;
-            currentReport = data.report;
+        console.log(
+            "API RESPONSE:",
+            data
+        );
+
+        if(
+            data.success &&
+            data.report
+        ){
+
+            reportContent.innerHTML =
+                data.report;
+
+            currentReport =
+                data.report;
+
         }else{
-            reportContent.innerHTML = "<p>Unable to generate AI report.</p>";
-            currentReport = "<p>Unable to generate AI report.</p>";
+
+            reportContent.innerHTML = `
+                <h3>API Error</h3>
+                <pre>${JSON.stringify(data,null,2)}</pre>
+            `;
+
+            currentReport = `
+                <pre>${JSON.stringify(data,null,2)}</pre>
+            `;
         }
 
     }catch(error){
+
         console.error(error);
-        reportContent.innerHTML = "<p>Error generating AI report.</p>";
-        currentReport = "<p>Error generating AI report.</p>";
+
+        reportContent.innerHTML = `
+            <h3>Frontend Error</h3>
+            <pre>${error.message}</pre>
+        `;
+
+        currentReport = `
+            <pre>${error.message}</pre>
+        `;
     }
 }
 
