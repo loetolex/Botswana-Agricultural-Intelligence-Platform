@@ -5,6 +5,7 @@ const openai = new OpenAI({
 });
 
 export default async function handler(req, res) {
+
   if (req.method !== "POST") {
     return res.status(405).json({
       success: false,
@@ -13,20 +14,44 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { disease, confidence, country, district, cropOrAnimal } = req.body;
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4.1-mini",
-      temperature: 0.4,
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are a senior agricultural and veterinary advisor for SADC. Return valid HTML only."
-        },
-        {
-          role: "user",
-          content: `
+    console.log(
+      "OPENAI KEY EXISTS:",
+      !!process.env.OPENAI_API_KEY
+    );
+
+    const {
+      disease,
+      confidence,
+      country,
+      district,
+      cropOrAnimal
+    } = req.body;
+
+    console.log("REQUEST DATA:", {
+      disease,
+      confidence,
+      country,
+      district,
+      cropOrAnimal
+    });
+
+    const completion =
+      await openai.chat.completions.create({
+
+        model: "gpt-4.1-mini",
+
+        temperature: 0.4,
+
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are a senior agricultural and veterinary advisor for SADC. Return valid HTML only."
+          },
+          {
+            role: "user",
+            content: `
 Disease/Pest: ${disease}
 Confidence: ${confidence}%
 Country: ${country}
@@ -34,6 +59,7 @@ District: ${district}
 Category: ${cropOrAnimal}
 
 Generate:
+
 1. Overview
 2. Severity
 3. Immediate Actions
@@ -46,19 +72,36 @@ Generate:
 
 Return HTML only.
 `
-        }
-      ]
-    });
+          }
+        ]
+      });
 
-    res.status(200).json({
+    console.log(
+      "OPENAI SUCCESS"
+    );
+
+    return res.status(200).json({
       success: true,
-      report: completion.choices[0].message.content
+      report:
+        completion.choices[0].message.content
     });
 
   } catch (error) {
-    res.status(500).json({
+
+    console.error(
+      "OPENAI ERROR:"
+    );
+
+    console.error(error);
+
+    return res.status(500).json({
       success: false,
-      error: error.message
+      error: error.message,
+      type: error.type || null,
+      code: error.code || null,
+      status: error.status || null
     });
+
   }
+
 }
