@@ -170,6 +170,23 @@ input[type=file]{
     margin-bottom:10px;
 }
 
+.save-btn{
+    width:100%;
+    border:none;
+    background:#1f6feb;
+    color:white;
+    padding:16px;
+    border-radius:12px;
+    font-size:18px;
+    margin-top:20px;
+    cursor:pointer;
+    transition:.3s;
+}
+
+.save-btn:hover{
+    background:#1759c2;
+}
+
 .footer{
     text-align:center;
     margin-top:20px;
@@ -245,13 +262,16 @@ input[type=file]{
                 </div>
             </div>
 
+            <button class="save-btn" onclick="saveCaseReport()">
+                💾 Save Case Report
+            </button>
+
         </div>
 
     </div>
 
     <div class="footer">
-        
-        Designed & Developed by Bokang Loeto Jobe 
+        Designed & Developed by Bokang Loeto Jobe
     </div>
 
 </div>
@@ -261,12 +281,16 @@ input[type=file]{
 let model;
 let labels;
 
+let currentPrediction = "";
+let currentConfidence = "";
+let currentReport = "";
+let currentImage = "";
+
 async function loadModel(){
 
     model = await tf.loadLayersModel("./model.json");
 
-    const metadata =
-        await fetch("./metadata.json")
+    const metadata = await fetch("./metadata.json")
         .then(res => res.json());
 
     labels = metadata.labels;
@@ -290,10 +314,18 @@ document
     document.getElementById("preview").style.display = "block";
 });
 
+function toBase64(file){
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = error => reject(error);
+    });
+}
+
 async function predictImage(){
 
-    const file =
-        document.getElementById("imageInput").files[0];
+    const file = document.getElementById("imageInput").files[0];
 
     if(!file){
         alert("Please select an image.");
@@ -307,8 +339,7 @@ async function predictImage(){
     img.src = URL.createObjectURL(file);
     await img.decode();
 
-    let tensor =
-        tf.browser
+    let tensor = tf.browser
         .fromPixels(img)
         .resizeBilinear([224,224])
         .toFloat();
@@ -333,6 +364,11 @@ async function predictImage(){
         (scores[bestIndex] * 100).toFixed(2)
     );
 
+    currentPrediction = label;
+    currentConfidence = confidence;
+    currentImage = await toBase64(file);
+    currentReport = "";
+
     document.getElementById("loading").style.display = "none";
     document.getElementById("resultCard").style.display = "block";
     document.getElementById("prediction").innerHTML = label;
@@ -349,9 +385,7 @@ async function predictImage(){
 
 async function generateAIReport(label, confidence){
 
-    const reportContent =
-        document.getElementById("aiReportContent");
-
+    const reportContent = document.getElementById("aiReportContent");
     reportContent.innerHTML = "<p>Generating AI advisory report...</p>";
 
     try{
@@ -374,14 +408,90 @@ async function generateAIReport(label, confidence){
 
         if(data.success && data.report){
             reportContent.innerHTML = data.report;
+            currentReport = data.report;
         }else{
             reportContent.innerHTML = "<p>Unable to generate AI report.</p>";
+            currentReport = "<p>Unable to generate AI report.</p>";
         }
 
     }catch(error){
         console.error(error);
         reportContent.innerHTML = "<p>Error generating AI report.</p>";
+        currentReport = "<p>Error generating AI report.</p>";
     }
+}
+
+function saveCaseReport(){
+
+    if(!currentPrediction){
+        alert("Please run a prediction first.");
+        return;
+    }
+
+    const today = new Date().toLocaleString();
+
+    const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${currentPrediction} Case Report</title>
+<style>
+    body{
+        font-family: Arial, sans-serif;
+        padding: 30px;
+        color: #222;
+        line-height: 1.7;
+        background: #fff;
+    }
+    h1,h2,h3{
+        color: #0f8f3d;
+    }
+    .meta{
+        margin-bottom: 20px;
+        padding: 15px;
+        border: 1px solid #d9e8dc;
+        border-radius: 12px;
+        background: #f8fffa;
+    }
+    img{
+        max-width: 100%;
+        border-radius: 12px;
+        margin: 15px 0;
+    }
+    .report{
+        margin-top: 20px;
+        padding-top: 20px;
+        border-top: 1px solid #d9e8dc;
+    }
+</style>
+</head>
+<body>
+
+<h1>Botswana Agricultural Intelligence Platform</h1>
+<h2>Case Report</h2>
+
+<div class="meta">
+    <p><strong>Date:</strong> ${today}</p>
+    <p><strong>Prediction:</strong> ${currentPrediction}</p>
+    <p><strong>Confidence:</strong> ${currentConfidence}%</p>
+</div>
+
+<img src="${currentImage}" alt="Uploaded pest image">
+
+<div class="report">
+    ${currentReport}
+</div>
+
+</body>
+</html>`;
+
+    const blob = new Blob([html], { type: "text/html" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = `Case-${Date.now()}.html`;
+    link.click();
 }
 
 </script>
