@@ -348,7 +348,9 @@ function toBase64(file){
 }
 
 
-if(!modelLoaded){
+async function predictImage(){
+
+    if(!modelLoaded){
 
     alert(
         "Livestock model is still loading. Please wait a few seconds and try again."
@@ -356,7 +358,6 @@ if(!modelLoaded){
 
     return;
 }
-async function predictImage(){
 
     const file = document.getElementById("imageInput").files[0];
 
