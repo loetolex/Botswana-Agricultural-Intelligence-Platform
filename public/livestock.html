@@ -233,10 +233,13 @@ input[type=file]{
             <img id="previewImage" alt="Preview">
         </div>
 
-        <button class="predict-btn" onclick="predictImage()">
-            Predict Cattle 
-        </button>
-
+       <button
+    class="predict-btn"
+    id="predictBtn"
+    onclick="predictImage()"
+    disabled>
+    Loading Model...
+</button>
         <div class="loading" id="loading">
             Analyzing Image...
         </div>
@@ -280,7 +283,7 @@ input[type=file]{
 
 let model;
 let labels;
-
+let modelLoaded = false;
 let currentPrediction = "";
 let currentConfidence = "";
 let currentReport = "";
@@ -288,22 +291,39 @@ let currentImage = "";
 
 async function loadModel(){
 
-    model = await tf.loadLayersModel(
-        "/models/livestock/model.json"
-    );
+    try{
 
-    const metadata =
-        await fetch(
-            "/models/livestock/metadata.json"
-        ).then(res => res.json());
+        model = await tf.loadLayersModel(
+            "/models/livestock/model.json"
+        );
 
-    labels = metadata.labels;
+        const metadata =
+            await fetch(
+                "/models/livestock/metadata.json"
+            ).then(res => res.json());
 
-    console.log("Livestock Model Loaded");
+        labels = metadata.labels;
+
+        modelLoaded = true;
+
+        document.getElementById("predictBtn").disabled = false;
+        document.getElementById("predictBtn").innerHTML =
+            "Predict Cattle";
+
+        console.log("Livestock Model Loaded");
+
+    }catch(error){
+
+        console.error(
+            "Model Load Error:",
+            error
+        );
+
+        alert(
+            "Failed to load livestock model."
+        );
+    }
 }
-
-loadModel();
-
 document
 .getElementById("imageInput")
 .addEventListener("change", function(e){
@@ -327,6 +347,15 @@ function toBase64(file){
     });
 }
 
+
+if(!modelLoaded){
+
+    alert(
+        "Livestock model is still loading. Please wait a few seconds and try again."
+    );
+
+    return;
+}
 async function predictImage(){
 
     const file = document.getElementById("imageInput").files[0];
