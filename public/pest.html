@@ -526,11 +526,15 @@ function saveCaseReport(){
 </body>
 </html>`;
 
-    const blob = new Blob([html], { type: "text/html" });
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(blob);
-    link.download = `Case-${Date.now()}.pdf`;
-    link.click();
+    const reportWindow = window.open("", "_blank");
+
+reportWindow.document.open();
+reportWindow.document.write(html);
+reportWindow.document.close();
+
+setTimeout(() => {
+    reportWindow.print();
+}, 1000);
 }
 
 </script>
