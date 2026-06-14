@@ -1,112 +1,121 @@
-import formidable from "formidable";
-import fs from "fs";
-import sharp from "sharp";
-import * as tf from "@tensorflow/tfjs";
+const formidable = require("formidable");
+const fs = require("fs");
+const sharp = require("sharp");
+const tf = require("@tensorflow/tfjs");
 
-export const config = {
+module.exports.config = {
   api: {
-    bodyParser: false
-  }
+    bodyParser: false,
+  },
 };
 
-let model;
-let labels;
+let model = null;
+let labels = null;
 
 async function loadModel() {
-
   if (model) return;
 
+  console.log("Loading model...");
+
   model = await tf.loadLayersModel(
-    "https://botswana-agricultural-intelligence-three.vercel.app//models/livestock/model.json"
+    "https://botswana-agricultural-intelligence-three.vercel.app/models/livestock/model.json"
   );
 
-  const metadata = JSON.parse(
-    fs.readFileSync(
-      "./public/models/livestock/metadata.json",
-      "utf8"
-    )
+  console.log("Model loaded");
+
+  const metadataResponse = await fetch(
+    "https://botswana-agricultural-intelligence-three.vercel.app/models/livestock/metadata.json"
   );
+
+  const metadata = await metadataResponse.json();
 
   labels = metadata.labels;
+
+  console.log("Labels loaded:", labels.length);
 }
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
+  try {
+    await loadModel();
 
-  await loadModel();
+    const form = formidable({
+      multiples: false,
+    });
 
-  const form = formidable({});
+    form.parse(req, async (err, fields, files) => {
+      try {
+        if (err) {
+          return res.status(500).json({
+            success: false,
+            error: err.message,
+          });
+        }
 
-  form.parse(req, async (err, fields, files) => {
+        const uploadedFile =
+          files.image?.[0] || files.image;
 
-    try {
+        if (!uploadedFile) {
+          return res.status(400).json({
+            success: false,
+            error: "No image uploaded",
+          });
+        }
 
-      if (err) {
+        const imageBuffer = fs.readFileSync(
+          uploadedFile.filepath
+        );
+
+        const resized = await sharp(imageBuffer)
+          .resize(224, 224)
+          .removeAlpha()
+          .raw()
+          .toBuffer();
+
+        let tensor = tf.tensor3d(
+          new Uint8Array(resized),
+          [224, 224, 3]
+        );
+
+        tensor = tensor
+          .toFloat()
+          .div(127.5)
+          .sub(1)
+          .expandDims(0);
+
+        const prediction = model.predict(tensor);
+
+        const scores = await prediction.data();
+
+        let bestIndex = 0;
+
+        for (let i = 1; i < scores.length; i++) {
+          if (scores[i] > scores[bestIndex]) {
+            bestIndex = i;
+          }
+        }
+
+        return res.status(200).json({
+          success: true,
+          prediction: labels[bestIndex],
+          confidence: Number(
+            (scores[bestIndex] * 100).toFixed(2)
+          ),
+        });
+      } catch (error) {
+        console.error(error);
+
         return res.status(500).json({
           success: false,
-          error: err.message
+          error: error.message,
         });
       }
+    });
+  } catch (error) {
+    console.error(error);
 
-      const uploadedFile = files.image?.[0] || files.image;
-
-      if (!uploadedFile) {
-        return res.status(400).json({
-          success: false,
-          error: "No image uploaded"
-        });
-      }
-
-      const imageBuffer = fs.readFileSync(
-        uploadedFile.filepath
-      );
-
-      const resized = await sharp(imageBuffer)
-        .resize(224, 224)
-        .removeAlpha()
-        .raw()
-        .toBuffer();
-
-      let tensor = tf.tensor3d(
-        new Uint8Array(resized),
-        [224, 224, 3]
-      );
-
-      tensor = tensor
-        .toFloat()
-        .div(127.5)
-        .sub(1)
-        .expandDims();
-
-      const prediction =
-        model.predict(tensor);
-
-      const scores =
-        await prediction.data();
-
-      let bestIndex = 0;
-
-      for (let i = 1; i < scores.length; i++) {
-        if (scores[i] > scores[bestIndex]) {
-          bestIndex = i;
-        }
-      }
-
-      return res.status(200).json({
-        success: true,
-        prediction: labels[bestIndex],
-        confidence:
-          Number(
-            (scores[bestIndex] * 100)
-              .toFixed(2)
-          )
-      });
-
-    } catch (error) {
-
-      return res.status(500).json({
-        success: false,
-        error: error.message
-      });
-    }
-  });
-}
+    return res.status(500).json({
+      success: false,
+      error: error.message,
+    });
+  }
+};
