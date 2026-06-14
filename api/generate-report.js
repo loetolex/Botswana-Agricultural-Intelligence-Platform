@@ -71,31 +71,92 @@ Return HTML only.
     );
 
     if (data.error) {
-
       return res.status(500).json({
         success: false,
         error: data.error.message,
         gemini: data
       });
-
     }
 
     const report =
       data?.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!report) {
-
       return res.status(500).json({
         success: false,
         error: "Gemini returned no report",
         gemini: data
       });
-
     }
+
+    const extractSection = (html, title) => {
+
+      const regex = new RegExp(
+        `<h2>${title}<\\/h2>([\\s\\S]*?)(?=<h2>|$)`,
+        "i"
+      );
+
+      const match = html.match(regex);
+
+      return match
+        ? match[1]
+            .replace(/<[^>]*>/g, "")
+            .replace(/\n/g, " ")
+            .trim()
+        : "";
+    };
+
+    const structuredReport = {
+
+      diseaseName: disease,
+
+      confidenceLevel:
+        confidence >= 90
+          ? "High"
+          : confidence >= 70
+          ? "Medium"
+          : "Low",
+
+      overview: extractSection(
+        report,
+        "Overview"
+      ),
+
+      severity: extractSection(
+        report,
+        "Severity"
+      ),
+
+      immediateActions: extractSection(
+        report,
+        "Immediate Actions"
+      ),
+
+      treatmentPlan: extractSection(
+        report,
+        "Treatment Plan"
+      ),
+
+      prevention: extractSection(
+        report,
+        "Prevention"
+      ),
+
+      economicImpact: extractSection(
+        report,
+        "Economic Impact"
+      ),
+
+      monitoringPlan: extractSection(
+        report,
+        "Monitoring Plan"
+      )
+    };
 
     return res.status(200).json({
       success: true,
-      report
+      report,
+      structuredReport
     });
 
   } catch (error) {
