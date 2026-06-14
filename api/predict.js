@@ -1,152 +1,112 @@
-import * as tf from "@tensorflow/tfjs-node";
-import sharp from "sharp";
+import formidable from "formidable";
 import fs from "fs";
-import path from "path";
+import sharp from "sharp";
+import * as tf from "@tensorflow/tfjs";
 
-const loadedModels = {};
-
-async function loadModel(modelName) {
-  if (loadedModels[modelName]) {
-    return loadedModels[modelName];
+export const config = {
+  api: {
+    bodyParser: false
   }
+};
 
-  const modelPath = path.join(
-    process.cwd(),
-    "public",
-    "models",
-    modelName,
-    "model.json"
-  );
+let model;
+let labels;
 
-  const metadataPath = path.join(
-    process.cwd(),
-    "public",
-    "models",
-    modelName,
-    "metadata.json"
-  );
+async function loadModel() {
 
-  const model = await tf.loadLayersModel(
-    `file://${modelPath}`
+  if (model) return;
+
+  model = await tf.loadLayersModel(
+    "https://your-vercel-domain/models/livestock/model.json"
   );
 
   const metadata = JSON.parse(
-    fs.readFileSync(metadataPath, "utf8")
+    fs.readFileSync(
+      "./public/models/livestock/metadata.json",
+      "utf8"
+    )
   );
 
-  loadedModels[modelName] = {
-    model,
-    labels: metadata.labels
-  };
-
-  console.log(`${modelName} model loaded`);
-
-  return loadedModels[modelName];
+  labels = metadata.labels;
 }
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({
-      success: false,
-      error: "Method not allowed"
-    });
-  }
 
-  try {
-    const {
-      model: modelName,
-      image
-    } = req.body;
+  await loadModel();
 
-    if (!modelName) {
-      return res.status(400).json({
-        success: false,
-        error: "Model not specified"
-      });
-    }
+  const form = formidable({});
 
-    if (!image) {
-      return res.status(400).json({
-        success: false,
-        error: "Image not provided"
-      });
-    }
+  form.parse(req, async (err, fields, files) => {
 
-    const {
-      model,
-      labels
-    } = await loadModel(modelName);
+    try {
 
-    const base64Data = image.replace(
-      /^data:image\/\w+;base64,/,
-      ""
-    );
-
-    const buffer = Buffer.from(
-      base64Data,
-      "base64"
-    );
-
-    const resized = await sharp(buffer)
-      .resize(224, 224)
-      .removeAlpha()
-      .raw()
-      .toBuffer();
-
-    let tensor = tf.tensor3d(
-      new Uint8Array(resized),
-      [224, 224, 3]
-    );
-
-    tensor = tensor
-      .toFloat()
-      .div(127.5)
-      .sub(1)
-      .expandDims();
-
-    const prediction = model.predict(tensor);
-
-    const scores = await prediction.data();
-
-    let bestIndex = 0;
-
-    for (let i = 1; i < scores.length; i++) {
-      if (scores[i] > scores[bestIndex]) {
-        bestIndex = i;
+      if (err) {
+        return res.status(500).json({
+          success: false,
+          error: err.message
+        });
       }
+
+      const uploadedFile = files.image?.[0] || files.image;
+
+      if (!uploadedFile) {
+        return res.status(400).json({
+          success: false,
+          error: "No image uploaded"
+        });
+      }
+
+      const imageBuffer = fs.readFileSync(
+        uploadedFile.filepath
+      );
+
+      const resized = await sharp(imageBuffer)
+        .resize(224, 224)
+        .removeAlpha()
+        .raw()
+        .toBuffer();
+
+      let tensor = tf.tensor3d(
+        new Uint8Array(resized),
+        [224, 224, 3]
+      );
+
+      tensor = tensor
+        .toFloat()
+        .div(127.5)
+        .sub(1)
+        .expandDims();
+
+      const prediction =
+        model.predict(tensor);
+
+      const scores =
+        await prediction.data();
+
+      let bestIndex = 0;
+
+      for (let i = 1; i < scores.length; i++) {
+        if (scores[i] > scores[bestIndex]) {
+          bestIndex = i;
+        }
+      }
+
+      return res.status(200).json({
+        success: true,
+        prediction: labels[bestIndex],
+        confidence:
+          Number(
+            (scores[bestIndex] * 100)
+              .toFixed(2)
+          )
+      });
+
+    } catch (error) {
+
+      return res.status(500).json({
+        success: false,
+        error: error.message
+      });
     }
-
-    const results = labels.map((label, index) => ({
-      label,
-      confidence: Number(
-        (scores[index] * 100).toFixed(2)
-      )
-    }));
-
-    results.sort(
-      (a, b) => b.confidence - a.confidence
-    );
-
-    tf.dispose(tensor);
-    tf.dispose(prediction);
-
-    return res.status(200).json({
-      success: true,
-      model: modelName,
-      prediction: labels[bestIndex],
-      confidence: Number(
-        (scores[bestIndex] * 100).toFixed(2)
-      ),
-      topPredictions: results.slice(0, 5)
-    });
-
-  } catch (error) {
-
-    console.error(error);
-
-    return res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
+  });
 }
