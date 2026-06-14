@@ -17,7 +17,7 @@ async function loadModel() {
   if (model) return;
 
   model = await tf.loadLayersModel(
-    "https://your-vercel-domain/models/livestock/model.json"
+    "https://botswana-agricultural-intelligence-three.vercel.app//models/livestock/model.json"
   );
 
   const metadata = JSON.parse(
