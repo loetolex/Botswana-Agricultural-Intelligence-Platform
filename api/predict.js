@@ -31,14 +31,15 @@ async function loadModel() {
 
   labels = metadata.labels;
 
-  console.log("Labels loaded:", labels.length);
+  console.log(`Loaded ${labels.length} labels`);
 }
 
 module.exports = async function handler(req, res) {
   try {
     await loadModel();
 
-    const form = formidable({
+    // FIX FOR FORMIDABLE V3
+    const form = new formidable.IncomingForm({
       multiples: false,
     });
 
@@ -51,8 +52,9 @@ module.exports = async function handler(req, res) {
           });
         }
 
-        const uploadedFile =
-          files.image?.[0] || files.image;
+        const uploadedFile = Array.isArray(files.image)
+          ? files.image[0]
+          : files.image;
 
         if (!uploadedFile) {
           return res.status(400).json({
