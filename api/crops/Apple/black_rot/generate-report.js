@@ -14,9 +14,9 @@ export default async function handler(req, res) {
 
     const {
       disease = "Black Rot",
-      confidence,
-      country,
-      district,
+      confidence = 0,
+      country = "",
+      district = "",
       cropOrAnimal = "Apple"
     } = req.body;
 
@@ -33,52 +33,118 @@ export default async function handler(req, res) {
               parts: [
                 {
                   text: `
-You are a senior plant pathologist.
+You are a senior plant pathologist and agricultural advisor.
 
-Crop: Apple
-Disease: Black Rot
-Confidence: ${confidence}
+Crop: ${cropOrAnimal}
+Disease: ${disease}
+Confidence: ${confidence}%
 Country: ${country}
 District: ${district}
 
-Generate a detailed HTML report with:
+Generate a detailed evidence-based HTML report.
+
+Return the following sections exactly:
 
 <h2>Overview</h2>
+
+Explain:
+- what the disease is
+- symptoms
+- causal organism
+- transmission
+- favorable conditions.
+
 <h2>Severity</h2>
+
+Explain:
+- disease severity
+- expected yield losses
+- economic importance.
+
 <h2>Immediate Actions</h2>
+
+Provide actions farmers should take immediately.
+
 <h2>Treatment Plan</h2>
+
+Include:
+- cultural control
+- biological control
+- chemical control
+- integrated disease management.
+
 <h2>Prevention</h2>
+
+Provide prevention recommendations.
+
 <h2>Economic Impact</h2>
+
+Explain:
+- crop losses
+- quality losses
+- financial implications.
+
 <h2>Monitoring Plan</h2>
 
-Use evidence-based agricultural recommendations.
-
-At the end provide:
+Explain:
+- what to monitor
+- how often
+- indicators of recovery.
 
 <h2>Scientific References</h2>
 
-as an unordered list:
+Provide an HTML list:
 
 <ul>
 <li>
-<a href="URL">Title</a>
+<a href="URL">
+Title - Authors (Year)
+</a>
 </li>
 </ul>
 
-Include references from:
-- University of Minnesota Extension
-- Penn State Extension
-- USDA
-- FAO
-- NCBI
+Include at least 5 REAL references from:
 
-Also provide:
+- FAO
+- USDA
+- NCBI
+- Penn State Extension
+- University of Minnesota Extension
+- Peer-reviewed journals.
 
 <h2>Reference Images</h2>
 
-with:
+Provide an HTML list:
 
-<img src="IMAGE_URL" />
+<ul>
+<li>
+<img src="IMAGE_URL"/>
+<a href="SOURCE_URL">
+Caption
+</a>
+</li>
+</ul>
+
+<h2>Scientific References JSON</h2>
+
+[
+  {
+    "title": "",
+    "authors": "",
+    "year": "",
+    "url": ""
+  }
+]
+
+<h2>Reference Images JSON</h2>
+
+[
+  {
+    "caption": "",
+    "imageUrl": "",
+    "sourceUrl": ""
+  }
+]
 
 Return HTML only.
 `
@@ -90,7 +156,8 @@ Return HTML only.
       }
     );
 
-    const data = await geminiResponse.json();
+    const data =
+      await geminiResponse.json();
 
     console.log(
       "FULL GEMINI RESPONSE:",
@@ -111,18 +178,23 @@ Return HTML only.
     if (!report) {
       return res.status(500).json({
         success: false,
-        error: "Gemini returned no report",
+        error:
+          "Gemini returned no report",
         gemini: data
       });
     }
 
-    const extractSection = (html, title) => {
+    const extractSection = (
+      html,
+      title
+    ) => {
       const regex = new RegExp(
         `<h2>${title}<\\/h2>([\\s\\S]*?)(?=<h2>|$)`,
         "i"
       );
 
-      const match = html.match(regex);
+      const match =
+        html.match(regex);
 
       return match
         ? match[1]
@@ -131,6 +203,49 @@ Return HTML only.
             .trim()
         : "";
     };
+
+    const extractHtml = (
+      html,
+      title
+    ) => {
+      const regex = new RegExp(
+        `<h2>${title}<\\/h2>([\\s\\S]*?)(?=<h2>|$)`,
+        "i"
+      );
+
+      const match =
+        html.match(regex);
+
+      return match
+        ? match[1].trim()
+        : "";
+    };
+
+    const parseJsonSection = (
+      text
+    ) => {
+      try {
+        return JSON.parse(text);
+      } catch (e) {
+        return [];
+      }
+    };
+
+    const scientificReferencesJson =
+      parseJsonSection(
+        extractSection(
+          report,
+          "Scientific References JSON"
+        )
+      );
+
+    const referenceImagesJson =
+      parseJsonSection(
+        extractSection(
+          report,
+          "Reference Images JSON"
+        )
+      );
 
     const structuredReport = {
       diseaseName: disease,
@@ -152,40 +267,51 @@ Return HTML only.
         "Severity"
       ),
 
-      immediateActions: extractSection(
-        report,
-        "Immediate Actions"
-      ),
+      immediateActions:
+        extractSection(
+          report,
+          "Immediate Actions"
+        ),
 
-      treatmentPlan: extractSection(
-        report,
-        "Treatment Plan"
-      ),
+      treatmentPlan:
+        extractSection(
+          report,
+          "Treatment Plan"
+        ),
 
-      prevention: extractSection(
-        report,
-        "Prevention"
-      ),
+      prevention:
+        extractSection(
+          report,
+          "Prevention"
+        ),
 
-      economicImpact: extractSection(
-        report,
-        "Economic Impact"
-      ),
+      economicImpact:
+        extractSection(
+          report,
+          "Economic Impact"
+        ),
 
-      monitoringPlan: extractSection(
-        report,
-        "Monitoring Plan"
-      ),
+      monitoringPlan:
+        extractSection(
+          report,
+          "Monitoring Plan"
+        ),
 
-      scientificReferences: extractSection(
-        report,
-        "Scientific References"
-      ),
+      scientificReferences:
+        extractHtml(
+          report,
+          "Scientific References"
+        ),
 
-      referenceImages: extractSection(
-        report,
-        "Reference Images"
-      )
+      referenceImages:
+        extractHtml(
+          report,
+          "Reference Images"
+        ),
+
+      scientificReferencesJson,
+
+      referenceImagesJson
     };
 
     return res.status(200).json({
@@ -193,7 +319,6 @@ Return HTML only.
       report,
       structuredReport
     });
-
   } catch (error) {
     console.error(error);
 
