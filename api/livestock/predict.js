@@ -1,7 +1,8 @@
 const formidable = require("formidable");
 const fs = require("fs");
+const path = require("path");
 const sharp = require("sharp");
-const tf = require("@tensorflow/tfjs");
+const tf = require("@tensorflow/tfjs-node");
 
 module.exports.config = {
   api: {
@@ -15,30 +16,43 @@ let labels = null;
 async function loadModel() {
   if (model) return;
 
-  console.log("Loading model...");
+  console.log("Loading livestock model...");
+
+  const modelPath = path.join(
+    process.cwd(),
+    "models",
+    "livestock",
+    "model.json"
+  );
 
   model = await tf.loadLayersModel(
-    "https://botswana-agricultural-intelligence-three.vercel.app/models/livestock/model.json"
+    `file://${modelPath}`
   );
 
   console.log("Model loaded");
 
-  const metadataResponse = await fetch(
-    "https://botswana-agricultural-intelligence-three.vercel.app/models/livestock/metadata.json"
+  const metadataPath = path.join(
+    process.cwd(),
+    "models",
+    "livestock",
+    "metadata.json"
   );
 
-  const metadata = await metadataResponse.json();
+  const metadata = JSON.parse(
+    fs.readFileSync(metadataPath, "utf8")
+  );
 
   labels = metadata.labels;
 
-  console.log(`Loaded ${labels.length} labels`);
+  console.log(
+    `Loaded ${labels.length} labels`
+  );
 }
 
 module.exports = async function handler(req, res) {
   try {
     await loadModel();
 
-    // FIX FOR FORMIDABLE V3
     const form = new formidable.IncomingForm({
       multiples: false,
     });
@@ -95,6 +109,8 @@ module.exports = async function handler(req, res) {
             bestIndex = i;
           }
         }
+
+        tf.dispose([tensor, prediction]);
 
         return res.status(200).json({
           success: true,
