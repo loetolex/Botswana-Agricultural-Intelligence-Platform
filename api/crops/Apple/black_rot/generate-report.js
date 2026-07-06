@@ -14,7 +14,7 @@ export default async function handler(req, res) {
 
     const {
       disease = "Black Rot",
-      confidence = 0,
+      confidence = "",
       country = "",
       district = "",
       cropOrAnimal = "Apple"
