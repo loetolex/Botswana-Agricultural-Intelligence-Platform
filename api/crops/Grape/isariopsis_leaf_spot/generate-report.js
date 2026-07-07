@@ -13,8 +13,8 @@ export default async function handler(req, res) {
     );
 
     const {
-      disease = "Black Rot",
-      confidence = 0,
+      disease = "isariopsis leaf spot",
+      confidence = "",
       country = "",
       district = "",
       cropOrAnimal = "Grape"
