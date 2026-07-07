@@ -25,7 +25,7 @@ async function loadModel() {
     "models",
     "crops",
     "grape",
-    "Isariopsis_leaf_spot",
+    "isariopsis leaf spot",
     "model.json"
   );
 
