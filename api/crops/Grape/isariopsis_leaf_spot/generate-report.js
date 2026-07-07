@@ -1,351 +1,146 @@
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({
-      success: false,
-      error: "Method not allowed"
-    });
-  }
+const formidable = require("formidable");
+const fs = require("fs");
+const path = require("path");
+const sharp = require("sharp");
+const tf = require("@tensorflow/tfjs-node");
 
+module.exports.config = {
+  api: {
+    bodyParser: false,
+  },
+};
+
+let model = null;
+let labels = null;
+
+async function loadModel() {
+  if (model) return;
+
+  console.log(
+    "Loading Grape Isariopsis Leaf Spot model..."
+  );
+
+  const modelPath = path.join(
+    process.cwd(),
+    "models",
+    "crops",
+    "grape",
+    "Isariopsis_leaf_spot",
+    "model.json"
+  );
+
+  model = await tf.loadLayersModel(
+    `file://${modelPath}`
+  );
+
+  console.log("Model loaded");
+
+  const metadataPath = path.join(
+    process.cwd(),
+    "models",
+    "crops",
+    "grape",
+    "Isariopsis_leaf_spot",
+    "metadata.json"
+  );
+
+  const metadata = JSON.parse(
+    fs.readFileSync(metadataPath, "utf8")
+  );
+
+  labels = metadata.labels;
+
+  console.log(
+    `Loaded ${labels.length} labels`
+  );
+}
+
+module.exports = async function handler(req, res) {
   try {
-    console.log(
-      "GEMINI KEY EXISTS:",
-      !!process.env.GEMINI_API_KEY
-    );
+    await loadModel();
 
-    const {
-      disease = "Isariopsis Leaf Spot",
-      confidence = "",
-      country = "",
-      district = "",
-      cropOrAnimal = "Grape"
-    } = req.body;
+    const form = new formidable.IncomingForm({
+      multiples: false,
+    });
 
-    const geminiResponse = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-text: `
-You are a senior plant pathologist and viticulture advisor specializing in grape diseases.
-
-Crop: ${cropOrAnimal}
-Disease: ${disease}
-Confidence: ${confidence}%
-Country: ${country}
-District: ${district}
-
-Generate a detailed evidence-based HTML report specifically for Grape Isariopsis Leaf Spot.
-
-Isariopsis Leaf Spot is caused by:
-
-Pseudocercospora vitis
-(formerly Isariopsis clavispora)
-
-Include information about:
-
-- Small brown leaf spots
-- Dark brown to black margins
-- Angular lesions
-- Yellowing around lesions
-- Premature leaf drop
-- Reduced photosynthesis
-- Reduced vine vigor
-- Disease development
-- Environmental conditions favoring infection
-- Effects on grape quality and yield
-
-Return the following sections exactly:
-
-<h2>Overview</h2>
-
-Explain:
-
-- what the disease is
-- symptoms
-- causal organism
-- disease cycle
-- transmission
-- favorable environmental conditions.
-
-<h2>Severity</h2>
-
-Explain:
-
-- disease severity
-- expected yield losses
-- economic importance.
-
-<h2>Immediate Actions</h2>
-
-Provide actions farmers should take immediately.
-
-<h2>Treatment Plan</h2>
-
-Include:
-
-- cultural control
-- biological control
-- chemical control
-- integrated disease management
-
-Mention:
-
-- pruning infected vines
-- removing infected leaves
-- improving air circulation
-- sanitation
-- avoiding overhead irrigation
-- fungicides such as mancozeb, chlorothalonil and copper-based fungicides where appropriate.
-
-<h2>Prevention</h2>
-
-Provide prevention recommendations.
-
-<h2>Economic Impact</h2>
-
-Explain:
-
-- crop losses
-- quality losses
-- reduced vine vigor
-- financial implications
-- impact on commercial vineyards.
-
-<h2>Monitoring Plan</h2>
-
-Explain:
-
-- what to monitor
-- how often
-- indicators of disease progression
-- indicators of recovery.
-
-<h2>Scientific References</h2>
-
-Provide an HTML list:
-
-<ul>
-<li>
-<a href="URL">
-Title - Authors (Year)
-</a>
-</li>
-</ul>
-
-Include at least 5 REAL references from:
-
-- Cornell University
-- Penn State Extension
-- USDA
-- APS Journals
-- NCBI
-- FAO
-- University Extension publications
-- Peer-reviewed journals.
-
-<h2>Reference Images</h2>
-
-Provide an HTML list:
-
-<ul>
-<li>
-<img src="IMAGE_URL"/>
-<a href="SOURCE_URL">
-Caption
-</a>
-</li>
-</ul>
-
-Use REAL publicly accessible image URLs.
-
-<h2>Scientific References JSON</h2>
-
-[
-  {
-    "title": "",
-    "authors": "",
-    "year": "",
-    "url": ""
-  }
-]
-
-<h2>Reference Images JSON</h2>
-
-[
-  {
-    "caption": "",
-    "imageUrl": "",
-    "sourceUrl": ""
-  }
-]
-
-Return HTML only.
-`
-                }
-              ]
-            }
-          ]
-        })
-      }
-    );
-
-    const data = await geminiResponse.json();
-
-    console.log(
-      "FULL GEMINI RESPONSE:",
-      JSON.stringify(data, null, 2)
-    );
-
-    if (data.error) {
-      return res.status(500).json({
-        success: false,
-        error: data.error.message,
-        gemini: data
-      });
-    }
-
-    const report =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (!report) {
-      return res.status(500).json({
-        success: false,
-        error: "Gemini returned no report",
-        gemini: data
-      });
-    }
-
-    const extractSection = (html, title) => {
-      const regex = new RegExp(
-        `<h2>${title}<\\/h2>([\\s\\S]*?)(?=<h2>|$)`,
-        "i"
-      );
-
-      const match = html.match(regex);
-
-      return match
-        ? match[1]
-            .replace(/<[^>]*>/g, "")
-            .replace(/\n/g, " ")
-            .trim()
-        : "";
-    };
-
-    const extractHtml = (html, title) => {
-      const regex = new RegExp(
-        `<h2>${title}<\\/h2>([\\s\\S]*?)(?=<h2>|$)`,
-        "i"
-      );
-
-      const match = html.match(regex);
-
-      return match
-        ? match[1].trim()
-        : "";
-    };
-
-    const parseJsonSection = (text) => {
+    form.parse(req, async (err, fields, files) => {
       try {
-        return JSON.parse(text);
-      } catch {
-        return [];
+        if (err) {
+          return res.status(500).json({
+            success: false,
+            error: err.message,
+          });
+        }
+
+        const uploadedFile = Array.isArray(files.image)
+          ? files.image[0]
+          : files.image;
+
+        if (!uploadedFile) {
+          return res.status(400).json({
+            success: false,
+            error: "No image uploaded",
+          });
+        }
+
+        const imageBuffer = fs.readFileSync(
+          uploadedFile.filepath
+        );
+
+        const resized = await sharp(imageBuffer)
+          .resize(224, 224)
+          .removeAlpha()
+          .raw()
+          .toBuffer();
+
+        let tensor = tf.tensor3d(
+          new Uint8Array(resized),
+          [224, 224, 3]
+        );
+
+        tensor = tensor
+          .toFloat()
+          .div(127.5)
+          .sub(1)
+          .expandDims(0);
+
+        const prediction = model.predict(tensor);
+
+        const scores = await prediction.data();
+
+        let bestIndex = 0;
+
+        for (let i = 1; i < scores.length; i++) {
+          if (scores[i] > scores[bestIndex]) {
+            bestIndex = i;
+          }
+        }
+
+        tf.dispose([
+          tensor,
+          prediction
+        ]);
+
+        return res.status(200).json({
+          success: true,
+          crop: "Grape",
+          disease: "Isariopsis Leaf Spot",
+          prediction: labels[bestIndex],
+          confidence: Number(
+            (
+              scores[bestIndex] * 100
+            ).toFixed(2)
+          )
+        });
+
+      } catch (error) {
+        console.error(error);
+
+        return res.status(500).json({
+          success: false,
+          error: error.message,
+        });
       }
-    };
-
-    const scientificReferencesJson =
-      parseJsonSection(
-        extractSection(
-          report,
-          "Scientific References JSON"
-        )
-      );
-
-    const referenceImagesJson =
-      parseJsonSection(
-        extractSection(
-          report,
-          "Reference Images JSON"
-        )
-      );
-
-    const structuredReport = {
-      diseaseName: disease,
-
-      confidenceLevel:
-        confidence >= 90
-          ? "High"
-          : confidence >= 70
-          ? "Medium"
-          : "Low",
-
-      overview: extractSection(
-        report,
-        "Overview"
-      ),
-
-      severity: extractSection(
-        report,
-        "Severity"
-      ),
-
-      immediateActions:
-        extractSection(
-          report,
-          "Immediate Actions"
-        ),
-
-      treatmentPlan:
-        extractSection(
-          report,
-          "Treatment Plan"
-        ),
-
-      prevention:
-        extractSection(
-          report,
-          "Prevention"
-        ),
-
-      economicImpact:
-        extractSection(
-          report,
-          "Economic Impact"
-        ),
-
-      monitoringPlan:
-        extractSection(
-          report,
-          "Monitoring Plan"
-        ),
-
-      scientificReferences:
-        extractHtml(
-          report,
-          "Scientific References"
-        ),
-
-      referenceImages:
-        extractHtml(
-          report,
-          "Reference Images"
-        ),
-
-      scientificReferencesJson,
-
-      referenceImagesJson
-    };
-
-    return res.status(200).json({
-      success: true,
-      report,
-      structuredReport
     });
 
   } catch (error) {
@@ -353,7 +148,7 @@ Return HTML only.
 
     return res.status(500).json({
       success: false,
-      error: error.message
+      error: error.message,
     });
   }
-}
+};
